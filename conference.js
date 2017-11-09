@@ -74,7 +74,10 @@ import {
     trackAdded,
     trackRemoved
 } from './react/features/base/tracks';
-import { getLocationContextRoot } from './react/features/base/util';
+import {
+    getLocationContextRoot,
+    getJitsiMeetGlobalNS
+} from './react/features/base/util';
 import { statsEmitter } from './react/features/connection-indicator';
 import { showDesktopPicker } from './react/features/desktop-picker';
 import { maybeOpenFeedbackDialog } from './react/features/feedback';
@@ -1301,6 +1304,7 @@ export default {
         }
 
         options.applicationName = interfaceConfig.APP_NAME;
+        options.getWiFiStatsMethod = getJitsiMeetGlobalNS().getWiFiStats;
 
         return options;
     },
