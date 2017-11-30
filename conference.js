@@ -1725,15 +1725,18 @@ export default {
             if (user.isHidden()) {
                 return;
             }
+            const displayName = user.getDisplayName();
 
             APP.store.dispatch(participantJoined({
                 id,
-                name: user.getDisplayName(),
+                name: displayName,
                 role: user.getRole()
             }));
 
             logger.log('USER %s connnected', id, user);
-            APP.API.notifyUserJoined(id);
+            APP.API.notifyUserJoined(id, {
+                displayName
+            });
             APP.UI.addUser(user);
 
             // check the roles for the new user and reflect them
@@ -1891,6 +1894,7 @@ export default {
             }
 
             APP.UI.addListener(UIEvents.SELECTED_ENDPOINT, id => {
+                APP.API.notifyOnStageParticipantChanged(id);
                 try {
                     // do not try to select participant if there is none (we
                     // are alone in the room), otherwise an error will be
@@ -2387,7 +2391,11 @@ export default {
         APP.store.dispatch(conferenceJoined(room));
 
         APP.UI.mucJoined();
-        APP.API.notifyConferenceJoined(APP.conference.roomName);
+        APP.API.notifyConferenceJoined(
+            this.roomName,
+            this._room.myUserId(),
+            { displayName: APP.settings.getDisplayName() }
+        );
         APP.UI.markVideoInterrupted(false);
     },
 
@@ -2758,6 +2766,8 @@ export default {
         }));
 
         APP.settings.setDisplayName(formattedNickname);
+        APP.API.notifyDisplayNameChanged(id, formattedNickname);
+
         if (room) {
             room.setDisplayName(formattedNickname);
             APP.UI.changeDisplayName(id, formattedNickname);

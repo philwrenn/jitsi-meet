@@ -4,6 +4,7 @@ import * as JitsiMeetConferenceEvents from '../../ConferenceEvents';
 import { parseJWTFromURLParams } from '../../react/features/base/jwt';
 import { sendAnalyticsEvent } from '../../react/features/analytics';
 import { getJitsiMeetTransport } from '../transport';
+import UIEvents from '../../service/UI/UIEvents';
 
 import { API_ID } from './constants';
 
@@ -155,6 +156,7 @@ function toggleScreenSharing() {
  */
 class API {
     _enabled: boolean;
+    _notifyLargeVideoVisibilityChanged: Function;
 
     /**
      * Initializes the API. Setups message event listeners that will receive
@@ -177,11 +179,33 @@ class API {
          */
         this._enabled = true;
 
+        this._notifyLargeVideoVisibilityChanged
+            = this._notifyLargeVideoVisibilityChanged.bind(this);
+
         APP.conference.addListener(
             JitsiMeetConferenceEvents.DESKTOP_SHARING_ENABLED_CHANGED,
             onDesktopSharingEnabledChanged);
 
+        APP.UI.addListener(
+            UIEvents.LARGE_VIDEO_AVATAR_VISIBLE,
+            this._notifyLargeVideoVisibilityChanged);
+
         initCommands();
+    }
+
+    /**
+     * Notify external application (if API is enabled) that the large video
+     * visibility changed.
+     *
+     * @param {boolean} isHidden - True if the large video is hidden and false
+     * otherwise.
+     * @returns {void}
+     */
+    _notifyLargeVideoVisibilityChanged(isHidden) {
+        this._sendEvent({
+            name: 'large-video-visibility-changed',
+            isVisible: !isHidden
+        });
     }
 
     /**
@@ -238,12 +262,14 @@ class API {
      * conference.
      *
      * @param {string} id - User id.
+     * @param {Object} props - The display name of the user.
      * @returns {void}
      */
-    notifyUserJoined(id: string) {
+    notifyUserJoined(id: string, props: Object) {
         this._sendEvent({
             name: 'participant-joined',
-            id
+            id,
+            ...props
         });
     }
 
@@ -257,6 +283,22 @@ class API {
     notifyUserLeft(id: string) {
         this._sendEvent({
             name: 'participant-left',
+            id
+        });
+    }
+
+    /**
+     * Notify external application (if API is enabled) that user changed their
+     * avatar.
+     *
+     * @param {string} id - User id.
+     * @param {string} avatar - The new avatar URL of the participant.
+     * @returns {void}
+     */
+    notifyAvatarChanged(id: string, avatar: string) {
+        this._sendEvent({
+            name: 'avatar-changed',
+            avatar,
             id
         });
     }
@@ -282,12 +324,16 @@ class API {
      * been joined.
      *
      * @param {string} roomName - The room name.
+     * @param {string} id - The id of the local user.
+     * @param {Object} props - The display name of the local user.
      * @returns {void}
      */
-    notifyConferenceJoined(roomName: string) {
+    notifyConferenceJoined(roomName: string, id: string, props: Object) {
         this._sendEvent({
             name: 'video-conference-joined',
-            roomName
+            roomName,
+            id,
+            ...props
         });
     }
 
@@ -373,6 +419,20 @@ class API {
         });
     }
 
+    /**
+     * Notify external application (if API is enabled) that the on stage
+     * participant has changed.
+     *
+     * @param {string} id - User id of the new on stage participant.
+     * @returns {void}
+     */
+    notifyOnStageParticipantChanged(id: string) {
+        this._sendEvent({
+            name: 'on-stage-participant-changed',
+            id
+        });
+    }
+
 
     /**
      * Disposes the allocated resources.
@@ -385,6 +445,9 @@ class API {
             APP.conference.removeListener(
                 JitsiMeetConferenceEvents.DESKTOP_SHARING_ENABLED_CHANGED,
                 onDesktopSharingEnabledChanged);
+            APP.UI.removeListener(
+                UIEvents.LARGE_VIDEO_AVATAR_VISIBLE,
+                this._notifyLargeVideoVisibilityChanged);
         }
     }
 }

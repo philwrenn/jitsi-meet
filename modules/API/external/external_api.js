@@ -34,6 +34,7 @@ const commands = {
  * events expected by jitsi-meet
  */
 const events = {
+    'avatar-changed': 'avatarChanged',
     'audio-availability-changed': 'audioAvailabilityChanged',
     'audio-mute-status-changed': 'audioMuteStatusChanged',
     'display-name-change': 'displayNameChange',
@@ -224,7 +225,11 @@ export default class JitsiMeetExternalAPI extends EventEmitter {
                 }
             })
         });
-        this._numberOfParticipants = 1;
+        this._isLargeVideoVisible = true;
+        this._numberOfParticipants = 0;
+        this._participants = {};
+        this._myUserID = undefined;
+        this._onStageParticipant = undefined;
         this._setupListeners();
         id++;
     }
@@ -279,6 +284,34 @@ export default class JitsiMeetExternalAPI extends EventEmitter {
     }
 
     /**
+     * Returns the id of the on stage participant.
+     *
+     * @returns {string} - The id of the on stage participant.
+     */
+    _getOnStageParticipant() {
+        return this._onStageParticipant;
+    }
+
+
+    /**
+     * Getter for the large video element in Jitsi Meet.
+     *
+     * @returns {HTMLElement|undefined} - The large video.
+     */
+    _getLargeVideo() {
+        const iframe = this.getIFrame();
+
+        if (!this._isLargeVideoVisible
+                || !iframe
+                || !iframe.contentWindow
+                || !iframe.contentWindow.document) {
+            return;
+        }
+
+        return iframe.contentWindow.document.getElementById('largeVideo');
+    }
+
+    /**
      * Sets the size of the iframe element.
      *
      * @param {number|string} height - The height of the iframe.
@@ -308,12 +341,51 @@ export default class JitsiMeetExternalAPI extends EventEmitter {
      * @private
      */
     _setupListeners() {
-
         this._transport.on('event', ({ name, ...data }) => {
-            if (name === 'participant-joined') {
+            switch (name) {
+            case 'video-conference-joined':
+                this._myUserID = data.id;
+
+            // eslint-disable-next-line no-fallthrough
+            case 'participant-joined': {
+                this._participants[data.id] = {
+                    displayName: data.displayName
+                };
                 changeParticipantNumber(this, 1);
-            } else if (name === 'participant-left') {
+                break;
+            }
+            case 'participant-left':
                 changeParticipantNumber(this, -1);
+                delete this._participants[data.id];
+                break;
+            case 'display-name-change': {
+                const user = this._participants[data.id];
+
+                if (user) {
+                    user.displayName = data.displayname;
+                }
+                break;
+            }
+            case 'avatar-changed': {
+                const user = this._participants[data.id];
+
+                if (user) {
+                    user.avatar = data.avatar;
+                }
+                break;
+            }
+            case 'on-stage-participant-changed':
+                this._onStageParticipant = data.id;
+                this.emit('largeVideoChanged');
+                break;
+            case 'large-video-visibility-changed':
+                this._isLargeVideoVisible = data.isVisible;
+                this.emit('largeVideoChanged');
+                break;
+            case 'video-conference-left':
+                changeParticipantNumber(this, -1);
+                delete this._participants[this._myUserID];
+                break;
             }
 
             const eventName = events[name];
@@ -485,6 +557,30 @@ export default class JitsiMeetExternalAPI extends EventEmitter {
         return this._transport.sendRequest({
             name: 'is-audio-muted'
         });
+    }
+
+    /**
+     * Returns the avatar URL of a participant.
+     *
+     * @param {string} participantId - The id of the participant.
+     * @returns {string} The avatar URL.
+     */
+    getAvatar(participantId) {
+        const { avatar } = this._participants[participantId] || {};
+
+        return avatar;
+    }
+
+    /**
+     * Returns the display name of a participant.
+     *
+     * @param {string} participantId - The id of the participant.
+     * @returns {string} The display name.
+     */
+    getDisplayName(participantId) {
+        const { displayName } = this._participants[participantId] || {};
+
+        return displayName;
     }
 
     /**
